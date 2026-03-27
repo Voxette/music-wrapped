@@ -14,23 +14,25 @@ from enrich import fetch_tags_for_artists, fetch_wikidata_for_artists
 from analyze import run_analysis
 
 
-def fetch_lastfm_scrobbles(username, api_key, output_csv, progress_queue):
-    """Fetch all scrobbles for a Last.fm user via API."""
+def _fetch_pages(username, api_key, progress_queue, from_ts=None):
+    """Fetch scrobble pages from Last.fm API. Returns list of track dicts."""
     API_BASE = "https://ws.audioscrobbler.com/2.0/"
     page = 1
     total_pages = 1
     all_tracks = []
 
     while page <= total_pages:
-        params = urllib.parse.urlencode({
+        params = {
             "method": "user.getrecenttracks",
             "user": username,
             "api_key": api_key,
             "format": "json",
             "limit": "200",
             "page": str(page),
-        })
-        url = f"{API_BASE}?{params}"
+        }
+        if from_ts:
+            params["from"] = str(from_ts + 1)  # exclusive lower bound
+        url = f"{API_BASE}?{urllib.parse.urlencode(params)}"
 
         for attempt in range(5):
             try:
@@ -40,20 +42,18 @@ def fetch_lastfm_scrobbles(username, api_key, output_csv, progress_queue):
                 break
             except Exception as e:
                 if attempt == 4:
-                    raise RuntimeError(f"Failed to fetch page {page} after 5 attempts: {e}")
+                    raise RuntimeError(f"Failed to fetch page {page}: {e}")
                 time.sleep(min(2 ** attempt, 30))
 
         rt = data.get("recenttracks", {})
         attr = rt.get("@attr", {})
         total_pages = int(attr.get("totalPages", 1))
-        total_tracks = int(attr.get("total", 0))
 
         tracks = rt.get("track", [])
         if isinstance(tracks, dict):
             tracks = [tracks]
 
         for t in tracks:
-            # Skip "now playing" entries
             if t.get("@attr", {}).get("nowplaying"):
                 continue
             date_info = t.get("date", {})
@@ -76,14 +76,67 @@ def fetch_lastfm_scrobbles(username, api_key, output_csv, progress_queue):
         page += 1
         time.sleep(0.25)
 
-    # Write CSV
-    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.DictWriter(f, fieldnames=["Artist", "Album", "Track", "Date", "Timestamp", "Loved"])
-        writer.writeheader()
-        for t in all_tracks:
-            writer.writerow(t)
+    return all_tracks
 
-    return len(all_tracks)
+
+def fetch_lastfm_scrobbles(username, api_key, output_csv, progress_queue, cache_dir=None):
+    """Fetch scrobbles, using a per-user cache and incrementally updating."""
+    # Determine cache path
+    cache_csv = None
+    if cache_dir:
+        safe_name = "".join(c if c.isalnum() else "_" for c in username.lower())
+        cache_csv = os.path.join(cache_dir, f"scrobbles_{safe_name}.csv")
+
+    existing_tracks = []
+    last_ts = None
+
+    # Load existing cache if present
+    if cache_csv and os.path.exists(cache_csv):
+        with open(cache_csv, 'r', encoding='utf-8') as f:
+            rows = list(csv.DictReader(f))
+        if rows:
+            existing_tracks = rows
+            timestamps = [int(r["Timestamp"]) for r in rows if r.get("Timestamp", "").isdigit()]
+            if timestamps:
+                last_ts = max(timestamps)
+            progress_queue.put({
+                "stage": "fetch",
+                "progress": 0,
+                "total": 1,
+                "message": f"Found {len(existing_tracks):,} cached scrobbles — fetching new ones since last sync...",
+            })
+
+    # Fetch new scrobbles (all if no cache, incremental if cached)
+    new_tracks = _fetch_pages(username, api_key, progress_queue, from_ts=last_ts)
+
+    # Merge: new tracks first (most recent), then existing (dedup by timestamp)
+    existing_ts = {r["Timestamp"] for r in existing_tracks if r.get("Timestamp")}
+    new_tracks = [t for t in new_tracks if t["Timestamp"] not in existing_ts]
+    all_tracks = new_tracks + existing_tracks
+
+    # Sort by timestamp descending (Last.fm order)
+    all_tracks.sort(key=lambda r: int(r["Timestamp"]) if r.get("Timestamp", "").isdigit() else 0, reverse=True)
+
+    # Save to cache
+    fieldnames = ["Artist", "Album", "Track", "Date", "Timestamp", "Loved"]
+    if cache_csv:
+        with open(cache_csv, 'w', newline='', encoding='utf-8') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_tracks)
+
+    # Write session CSV
+    with open(output_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(all_tracks)
+
+    added = len(new_tracks)
+    total = len(all_tracks)
+    if last_ts:
+        progress_queue.put({"stage": "fetch", "progress": 1, "total": 1,
+                            "message": f"Updated: +{added:,} new scrobbles ({total:,} total)"})
+    return total
 
 
 def run_pipeline(session_id, source_type, input_data, progress_queue,
@@ -121,8 +174,8 @@ def run_pipeline(session_id, source_type, input_data, progress_queue,
         if source_type == "lastfm_username":
             if not api_key:
                 raise RuntimeError("Last.fm API key required for username fetch")
-            count = fetch_lastfm_scrobbles(input_data, api_key, csv_path, progress_queue)
-            progress_queue.put({"stage": "ingest", "progress": 1, "total": 1, "message": f"Fetched {count:,} scrobbles from Last.fm"})
+            count = fetch_lastfm_scrobbles(input_data, api_key, csv_path, progress_queue, cache_dir=cache_dir)
+            progress_queue.put({"stage": "ingest", "progress": 1, "total": 1, "message": f"Loaded {count:,} scrobbles"})
 
         elif source_type == "lastfm_csv":
             stats = normalize_lastfm_csv(input_data, csv_path)

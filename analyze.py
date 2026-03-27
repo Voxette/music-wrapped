@@ -1065,8 +1065,8 @@ def run_analysis(csv_path, tags_path=None, wikidata_path=None, output_path=None,
                 "pct": round(100 * from_hs / total, 1),
             }
 
-        # Post-HS overall and recent
-        post_hs = [s for s in dated if s["year"] > hs_end]
+        # Post-HS overall and recent (only if HS years were provided)
+        post_hs = [s for s in dated if hs_end and s["year"] > hs_end]
         post_hs_from = sum(1 for s in post_hs if s["artist"] in hs_artists)
         recent = [s for s in dated if s["year"] >= current_year - 2]
         recent_from = sum(1 for s in recent if s["artist"] in hs_artists)
@@ -1082,7 +1082,7 @@ def run_analysis(csv_path, tags_path=None, wikidata_path=None, output_path=None,
         hs_play_counts = Counter()
         recent_4y = set()
         for s in dated:
-            if s["year"] <= hs_end or s["year"] < hs_start:
+            if (hs_end and s["year"] <= hs_end) or (hs_start and s["year"] < hs_start):
                 hs_play_counts[s["artist"]] += 1
             if s["year"] >= current_year - 3:
                 recent_4y.add(s["artist"])
@@ -1095,7 +1095,7 @@ def run_analysis(csv_path, tags_path=None, wikidata_path=None, output_path=None,
         # Biggest post-HS discoveries
         post_hs_only = set()
         for s in dated:
-            if s["year"] > hs_end and s["artist"] not in hs_artists:
+            if hs_end and s["year"] > hs_end and s["artist"] not in hs_artists:
                 post_hs_only.add(s["artist"])
         discovery_plays = Counter()
         discovery_first = {}
