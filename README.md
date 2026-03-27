@@ -1,34 +1,29 @@
 # Music Wrapped
 
-Your listening history, analysed. Supports Last.fm profiles and Spotify extended streaming history exports.
+Your listening history, analysed. Connect Last.fm or upload a Spotify export to see your top artists, genres, where your music comes from geographically, how your taste has evolved year by year, and more.
 
-## Features
+## Download & Run
 
-- **Last.fm**: Enter your username (fetches via API) or upload a CSV export
-- **Spotify**: Upload your extended streaming history JSON files
-- Top artists, tracks, and albums across all time and by year
-- Genre breakdown using Last.fm tag data
-- Gender and country distribution of your listening
-- Geographic center of gravity with an animated GIF showing how it's shifted over time
-- Listening heatmap by hour and day of week
-- Artist discovery timeline
-- Listening concentration (how obsessive vs. eclectic you are)
-- Optional: high school / college era influence analysis
-
-## Setup
-
-```bash
-pip install -r requirements.txt
-export LASTFM_API_KEY=your_key_here  # get one free at https://www.last.fm/api/account/create
-python app.py
-```
-
-Then open **http://127.0.0.1:8097** in your browser.
-
-The API key is required for Last.fm username lookups and genre tag enrichment. Spotify CSV uploads work without it, but genre and country data will be limited.
+1. **[Download the latest release](https://github.com/Voxette/music-wrapped/releases/latest)** and unzip it
+2. Make sure **Python 3** is installed ([python.org](https://www.python.org/downloads/))
+3. Run the launcher:
+   - **Mac/Linux**: double-click `launch.sh`, or run `./launch.sh` in Terminal
+   - **Windows**: double-click `launch.bat`
+4. Your browser will open automatically at `http://127.0.0.1:8097`
 
 ## Getting your data
 
-**Last.fm**: Just enter your username — or export your history as CSV from [benjaminbenben.com/lastfm-to-csv](https://benjaminbenben.com/lastfm-to-csv/).
+**Last.fm** — just enter your username. You'll need a free API key from [last.fm/api/account/create](https://www.last.fm/api/account/create) (takes 30 seconds to register).
 
-**Spotify**: Go to [spotify.com/account/privacy](https://www.spotify.com/us/account/privacy/), request your **Extended streaming history** (not Account data), wait for the email (up to 30 days), then upload the `Streaming_History_Audio_*.json` files.
+**Spotify** — go to [spotify.com/account/privacy](https://www.spotify.com/us/account/privacy/), scroll down and request your **Extended streaming history**. Spotify emails you a download link within a few days (up to 30 days). Upload the `Streaming_History_Audio_*.json` files from that zip.
+
+## What you get
+
+- Top artists, tracks, and albums — all time and by year
+- Genre breakdown
+- Gender and country distribution of the artists you listen to
+- Geographic centre of gravity, with an animated map showing how it's shifted over time
+- Listening heatmap by hour and day of week
+- Artist discovery timeline
+- Listening concentration — how obsessive vs. eclectic you are
+- Optional: high school and college era influence (how much of what you listened to then you still listen to now)
