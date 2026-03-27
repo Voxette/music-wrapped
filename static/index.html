@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Music Wrapped</title>
+<style>
+:root { --bg: #0d1117; --bg2: #161b22; --bg3: #1c2333; --text: #e6edf3; --text2: #8b949e; --accent: #bc8cff; --accent2: #d4a5ff; --red: #d41109; --green: #1DB954; --border: #30363d; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+
+.container { max-width: 600px; width: 100%; padding: 40px 24px; text-align: center; }
+h1 { font-size: 3rem; font-weight: 800; margin-bottom: 0.3em; background: linear-gradient(135deg, var(--accent), var(--green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+.subtitle { color: var(--text2); font-size: 1.1rem; margin-bottom: 3rem; line-height: 1.6; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 2rem; background: var(--bg2); border-radius: 12px; padding: 4px; }
+.tab { flex: 1; padding: 12px; border: none; background: none; color: var(--text2); cursor: pointer; border-radius: 8px; font-size: 0.95rem; font-weight: 600; transition: all 0.2s; }
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--bg3); color: var(--text); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+
+.form-group { margin-bottom: 1.5rem; text-align: left; }
+.form-group label { display: block; font-size: 0.9rem; color: var(--text2); margin-bottom: 6px; }
+input[type="text"] { width: 100%; padding: 14px 16px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; color: var(--text); font-size: 1rem; outline: none; }
+input[type="text"]:focus { border-color: var(--accent); }
+input[type="file"] { display: none; }
+
+.drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 40px 20px; text-align: center; color: var(--text2); cursor: pointer; transition: all 0.2s; }
+.drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(188, 140, 255, 0.05); }
+.drop-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+.drop-zone .file-list { margin-top: 12px; font-size: 0.85rem; color: var(--accent2); }
+
+.btn { display: inline-block; width: 100%; padding: 14px 24px; border: none; border-radius: 10px; font-size: 1.05rem; font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-lastfm { background: var(--red); color: #fff; }
+.btn-lastfm:hover:not(:disabled) { background: #f22; }
+.btn-spotify { background: var(--green); color: #fff; }
+.btn-spotify:hover:not(:disabled) { background: #1ed760; }
+
+.or-divider { display: flex; align-items: center; gap: 16px; margin: 1.5rem 0; color: var(--text2); font-size: 0.85rem; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* Progress view */
+.progress-view { display: none; }
+.progress-view.active { display: block; }
+.progress-bar-container { background: var(--bg2); border-radius: 10px; overflow: hidden; height: 12px; margin: 1.5rem 0; }
+.progress-bar { height: 100%; background: linear-gradient(90deg, var(--accent), var(--green)); border-radius: 10px; transition: width 0.5s ease; width: 0%; }
+.progress-stage { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.5rem; }
+.progress-detail { color: var(--text2); font-size: 0.9rem; }
+.progress-steps { text-align: left; margin-top: 2rem; }
+.progress-step { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 0.9rem; color: var(--text2); }
+.progress-step.done { color: var(--green); }
+.progress-step.active { color: var(--text); font-weight: 600; }
+.step-icon { width: 24px; text-align: center; }
+
+.error-msg { color: #f44; margin-top: 1rem; font-size: 0.9rem; }
+.help-text { color: var(--text2); font-size: 0.8rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="container" id="main-view">
+  <h1>Music Wrapped</h1>
+  <p class="subtitle">Discover your listening personality — top artists, genres, geographic center, and more. Works with Last.fm or Spotify data exports.</p>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('lastfm')">Last.fm</button>
+    <button class="tab" onclick="switchTab('spotify')">Spotify</button>
+  </div>
+
+  <!-- API Key (shared across tabs) -->
+  <div class="form-group" id="apikey-group" style="margin-bottom:2rem">
+    <label>Last.fm API Key <span style="color:var(--text2);font-weight:normal">(required for username lookup; optional for CSV/Spotify — adds genre data)</span></label>
+    <input type="text" id="apikey-input" placeholder="Enter your Last.fm API key" oninput="saveApiKey(this.value)">
+    <details style="margin-top:8px">
+      <summary style="color:var(--accent);font-size:0.85rem;cursor:pointer">How do I get an API key?</summary>
+      <div style="color:var(--text2);font-size:0.85rem;line-height:1.7;margin-top:8px;text-align:left;padding:12px;background:var(--bg2);border-radius:8px">
+        1. Go to <a href="https://www.last.fm/api/account/create" style="color:var(--accent)" target="_blank">last.fm/api/account/create</a><br>
+        2. Sign in (or create a free Last.fm account)<br>
+        3. Fill in any app name (e.g. "Music Wrapped") and description<br>
+        4. Leave the callback URL blank<br>
+        5. Click "Submit" — your API key will be shown on the next page<br>
+        6. Copy the <strong>API Key</strong> (not the shared secret) and paste it above
+      </div>
+    </details>
+    <p class="help-text">Used to fetch scrobbles (Last.fm username mode) and genre tags for all sources. Your key stays in your browser and is sent only to Last.fm's API.</p>
+  </div>
+
+  <!-- Last.fm Panel -->
+  <div class="panel active" id="panel-lastfm">
+    <div class="form-group">
+      <label>Last.fm Username</label>
+      <input type="text" id="lastfm-username" placeholder="Enter your Last.fm username">
+    </div>
+    <button class="btn btn-lastfm" id="btn-lastfm-user" onclick="startLastfmUsername()">Generate My Wrapped</button>
+
+    <div class="or-divider">or upload a CSV export</div>
+
+    <div class="drop-zone" id="drop-lastfm" onclick="document.getElementById('file-lastfm').click()">
+      <div class="icon">📄</div>
+      <div>Drop your Last.fm CSV export here, or click to browse</div>
+      <div class="file-list" id="lastfm-files"></div>
+    </div>
+    <input type="file" id="file-lastfm" accept=".csv" onchange="handleLastfmFile(this)">
+    <button class="btn btn-lastfm" id="btn-lastfm-csv" onclick="startLastfmCSV()" style="margin-top:1rem" disabled>Upload & Analyze</button>
+    <p class="help-text">Export your data from <a href="https://lastfm.ghan.nl/export/" style="color:var(--accent)" target="_blank">lastfm.ghan.nl/export</a> or use a lastfmexport tool</p>
+  </div>
+
+  <!-- Spotify Panel -->
+  <div class="panel" id="panel-spotify">
+    <div class="drop-zone" id="drop-spotify" onclick="document.getElementById('file-spotify').click()">
+      <div class="icon">🎵</div>
+      <div>Drop your Spotify Extended Streaming History files here</div>
+      <div>Accepts .json files or a .zip archive</div>
+      <div class="file-list" id="spotify-files"></div>
+    </div>
+    <input type="file" id="file-spotify" accept=".json,.zip" multiple onchange="handleSpotifyFiles(this)">
+    <button class="btn btn-spotify" id="btn-spotify" onclick="startSpotify()" style="margin-top:1rem" disabled>Upload & Analyze</button>
+    <details style="margin-top:12px">
+      <summary style="color:var(--green);font-size:0.85rem;cursor:pointer">How do I get my Spotify data export?</summary>
+      <div style="color:var(--text2);font-size:0.85rem;line-height:1.7;margin-top:8px;padding:12px;background:var(--bg2);border-radius:8px;text-align:left">
+        1. Go to <a href="https://www.spotify.com/account/privacy/" style="color:var(--green)" target="_blank">spotify.com/account/privacy</a><br>
+        2. Scroll to "Download your data"<br>
+        3. Check <strong>"Extended streaming history"</strong> (uncheck "Account data" — you don't need it)<br>
+        4. Click "Request data"<br>
+        5. <strong>Check your email</strong> — Spotify sends a confirmation link you must click to start the export<br>
+        6. Wait for Spotify to email you again when it's ready (usually 5-30 days)<br>
+        7. Download the ZIP, then upload it here (or extract and upload the JSON files)
+      </div>
+    </details>
+    <p class="help-text" style="margin-top:8px">The export contains files like <code style="color:var(--green)">Streaming_History_Audio_2020-2024_0.json</code></p>
+  </div>
+
+  <!-- Life Eras (optional, shared across tabs) -->
+  <details id="eras-section" style="margin-top:2rem;text-align:left">
+    <summary style="color:var(--accent);font-size:0.95rem;cursor:pointer;font-weight:600">Add life eras (optional)</summary>
+    <div style="color:var(--text2);font-size:0.85rem;margin-top:6px;margin-bottom:12px">
+      See how your taste evolved relative to high school, college, etc. We'll analyze which artists stuck with you and which you discovered in each era.
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group" style="margin-bottom:0.5rem">
+        <label>High school start year</label>
+        <input type="text" id="era-hs-start" placeholder="e.g. 2007" maxlength="4" style="padding:10px 12px">
+      </div>
+      <div class="form-group" style="margin-bottom:0.5rem">
+        <label>High school end year</label>
+        <input type="text" id="era-hs-end" placeholder="e.g. 2011" maxlength="4" style="padding:10px 12px">
+      </div>
+      <div class="form-group" style="margin-bottom:0.5rem">
+        <label>College start year</label>
+        <input type="text" id="era-col-start" placeholder="e.g. 2011" maxlength="4" style="padding:10px 12px">
+      </div>
+      <div class="form-group" style="margin-bottom:0.5rem">
+        <label>College end year</label>
+        <input type="text" id="era-col-end" placeholder="e.g. 2015" maxlength="4" style="padding:10px 12px">
+      </div>
+    </div>
+  </details>
+
+  <div class="error-msg" id="error-msg"></div>
+</div>
+
+<div class="container progress-view" id="progress-view">
+  <h1>Music Wrapped</h1>
+  <div class="progress-stage" id="progress-stage">Starting...</div>
+  <div class="progress-bar-container"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="progress-detail" id="progress-detail"></div>
+  <div class="progress-steps" id="progress-steps">
+    <div class="progress-step active" data-stage="ingest"><span class="step-icon">⏳</span> Loading data</div>
+    <div class="progress-step" data-stage="enrich_tags"><span class="step-icon">○</span> Fetching genre tags</div>
+    <div class="progress-step" data-stage="enrich_wikidata"><span class="step-icon">○</span> Enriching artist metadata</div>
+    <div class="progress-step" data-stage="analyze"><span class="step-icon">○</span> Running analysis</div>
+  </div>
+</div>
+
+<script>
+let selectedLastfmFile = null;
+let selectedSpotifyFiles = [];
+
+// Era data
+function getEras() {
+  const eras = {};
+  const hsStart = document.getElementById('era-hs-start').value.trim();
+  const hsEnd = document.getElementById('era-hs-end').value.trim();
+  const colStart = document.getElementById('era-col-start').value.trim();
+  const colEnd = document.getElementById('era-col-end').value.trim();
+  if (hsStart && hsEnd) eras.high_school = { start: parseInt(hsStart), end: parseInt(hsEnd) };
+  if (colStart && colEnd) eras.college = { start: parseInt(colStart), end: parseInt(colEnd) };
+  return Object.keys(eras).length ? eras : null;
+}
+
+// API key persistence
+function saveApiKey(val) { localStorage.setItem('lastfm_api_key', val.trim()); }
+function getApiKey() { return document.getElementById('apikey-input').value.trim() || localStorage.getItem('lastfm_api_key') || ''; }
+// Restore saved key on load
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('lastfm_api_key');
+  if (saved) document.getElementById('apikey-input').value = saved;
+});
+
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('panel-' + tab).classList.add('active');
+}
+
+function handleLastfmFile(input) {
+  selectedLastfmFile = input.files[0];
+  if (selectedLastfmFile) {
+    document.getElementById('lastfm-files').textContent = selectedLastfmFile.name;
+    document.getElementById('btn-lastfm-csv').disabled = false;
+  }
+}
+
+function handleSpotifyFiles(input) {
+  selectedSpotifyFiles = Array.from(input.files);
+  if (selectedSpotifyFiles.length) {
+    document.getElementById('spotify-files').textContent = selectedSpotifyFiles.map(f => f.name).join(', ');
+    document.getElementById('btn-spotify').disabled = false;
+  }
+}
+
+// Drag & drop
+['drop-lastfm', 'drop-spotify'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dragover'); });
+  el.addEventListener('dragleave', () => el.classList.remove('dragover'));
+  el.addEventListener('drop', e => {
+    e.preventDefault();
+    el.classList.remove('dragover');
+    if (id === 'drop-lastfm') {
+      const f = e.dataTransfer.files[0];
+      if (f) { selectedLastfmFile = f; document.getElementById('lastfm-files').textContent = f.name; document.getElementById('btn-lastfm-csv').disabled = false; }
+    } else {
+      selectedSpotifyFiles = Array.from(e.dataTransfer.files);
+      if (selectedSpotifyFiles.length) { document.getElementById('spotify-files').textContent = selectedSpotifyFiles.map(f => f.name).join(', '); document.getElementById('btn-spotify').disabled = false; }
+    }
+  });
+});
+
+async function startLastfmUsername() {
+  const username = document.getElementById('lastfm-username').value.trim();
+  if (!username) return;
+  const api_key = getApiKey();
+  if (!api_key) { showError('Please enter your Last.fm API key above — it\'s needed to fetch your scrobbles and genre data.'); return; }
+  document.getElementById('btn-lastfm-user').disabled = true;
+  try {
+    const resp = await fetch('/start/lastfm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, api_key, eras: getEras()}),
+    });
+    const data = await resp.json();
+    if (data.error) { showError(data.error); document.getElementById('btn-lastfm-user').disabled = false; return; }
+    connectSSE(data.session_id);
+  } catch (e) { showError(e.message); }
+}
+
+async function startLastfmCSV() {
+  if (!selectedLastfmFile) return;
+  document.getElementById('btn-lastfm-csv').disabled = true;
+  const form = new FormData();
+  form.append('file', selectedLastfmFile);
+  const api_key = getApiKey();
+  if (api_key) form.append('api_key', api_key);
+  const eras = getEras();
+  if (eras) form.append('eras', JSON.stringify(eras));
+  try {
+    const resp = await fetch('/start/lastfm', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.error) { showError(data.error); document.getElementById('btn-lastfm-csv').disabled = false; return; }
+    connectSSE(data.session_id);
+  } catch (e) { showError(e.message); }
+}
+
+async function startSpotify() {
+  if (!selectedSpotifyFiles.length) return;
+  document.getElementById('btn-spotify').disabled = true;
+  const form = new FormData();
+  selectedSpotifyFiles.forEach(f => form.append('files', f));
+  const api_key = getApiKey();
+  if (api_key) form.append('api_key', api_key);
+  const eras = getEras();
+  if (eras) form.append('eras', JSON.stringify(eras));
+  try {
+    const resp = await fetch('/start/spotify', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (data.error) { showError(data.error); document.getElementById('btn-spotify').disabled = false; return; }
+    connectSSE(data.session_id);
+  } catch (e) { showError(e.message); }
+}
+
+function connectSSE(sessionId) {
+  document.getElementById('main-view').style.display = 'none';
+  document.getElementById('progress-view').classList.add('active');
+
+  const es = new EventSource('/progress/' + sessionId);
+  const stageOrder = ['ingest', 'enrich_tags', 'enrich_wikidata', 'analyze'];
+
+  es.onmessage = (event) => {
+    const d = JSON.parse(event.data);
+    document.getElementById('progress-detail').textContent = d.message || '';
+
+    if (d.stage === 'complete') {
+      es.close();
+      window.location.href = '/results/' + sessionId;
+      return;
+    }
+
+    if (d.stage === 'error') {
+      es.close();
+      document.getElementById('progress-stage').textContent = 'Error';
+      document.getElementById('progress-detail').textContent = d.message;
+      document.getElementById('progress-bar').style.background = '#f44';
+      return;
+    }
+
+    // Update stage label
+    const stageLabels = {ingest: 'Loading data...', enrich_tags: 'Fetching genre tags...', enrich_wikidata: 'Enriching artist metadata...', analyze: 'Running analysis...', fetch: 'Fetching scrobbles...'};
+    document.getElementById('progress-stage').textContent = stageLabels[d.stage] || d.stage;
+
+    // Update progress bar
+    if (d.total > 0) {
+      const stageIdx = stageOrder.indexOf(d.stage === 'fetch' ? 'ingest' : d.stage);
+      const stageWeight = 1 / stageOrder.length;
+      const withinStage = d.progress / d.total;
+      const overall = (stageIdx * stageWeight + withinStage * stageWeight) * 100;
+      document.getElementById('progress-bar').style.width = Math.min(overall, 99) + '%';
+    }
+
+    // Update step indicators
+    const currentStage = d.stage === 'fetch' ? 'ingest' : d.stage;
+    const cidx = stageOrder.indexOf(currentStage);
+    document.querySelectorAll('.progress-step').forEach((step, i) => {
+      step.classList.remove('done', 'active');
+      if (i < cidx) { step.classList.add('done'); step.querySelector('.step-icon').textContent = '✓'; }
+      else if (i === cidx) { step.classList.add('active'); step.querySelector('.step-icon').textContent = '⏳'; }
+    });
+  };
+
+  es.onerror = () => {
+    document.getElementById('progress-stage').textContent = 'Connection lost';
+    document.getElementById('progress-detail').textContent = 'Refresh to check if your report is ready';
+    es.close();
+  };
+}
+
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  document.querySelectorAll('.btn').forEach(b => b.disabled = false);
+}
+
+// Enter key on username input
+document.getElementById('lastfm-username').addEventListener('keydown', e => { if (e.key === 'Enter') startLastfmUsername(); });
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+data/sessions/
+data/cache/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+nohup.out
+.env
