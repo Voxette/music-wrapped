@@ -7,7 +7,8 @@ Your listening history, analysed. Connect Last.fm or upload a Spotify export to 
 1. **[Download the latest release](https://github.com/Voxette/music-wrapped/releases/latest)** and unzip it
 2. Make sure **Python 3** is installed ([python.org](https://www.python.org/downloads/))
 3. Run the launcher:
-   - **Mac/Linux**: double-click `launch.sh`, or run `./launch.sh` in Terminal
+   - **Mac**: double-click `launch.command`
+   - **Linux**: double-click `launch.sh` or run `./launch.sh` in Terminal
    - **Windows**: double-click `launch.bat`
 4. Your browser will open automatically at `http://127.0.0.1:8097`
 
