@@ -1041,11 +1041,11 @@ def run_analysis(csv_path, tags_path=None, wikidata_path=None, output_path=None,
         y = s["year"] if not s["unknown_date"] else None
         if y is not None and (hs_start <= y <= hs_end):
             hs_artists.add(s["artist"])
-    # Also count undated/import scrobbles as HS-era
-    for s in undated:
-        hs_artists.add(s["artist"])
-    # And very early imports that got dated as 1970
-    if hs_start:
+    # Only add undated/early scrobbles to HS if HS era was provided
+    if hs_start and hs_end:
+        for s in undated:
+            hs_artists.add(s["artist"])
+        # And very early imports that got dated before hs_start
         for s in dated:
             if s["year"] < hs_start:
                 hs_artists.add(s["artist"])
