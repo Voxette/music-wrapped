@@ -5,6 +5,7 @@ import json
 import os
 import queue
 import shutil
+import sys
 import time
 import uuid
 from datetime import datetime, timedelta
@@ -18,9 +19,18 @@ from pipeline import run_pipeline_thread
 # Config
 PORT = 8097
 LASTFM_API_KEY = os.environ.get("LASTFM_API_KEY", "")
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-STATIC_DIR = os.path.join(BASE_DIR, "static")
-DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# When bundled with PyInstaller, read-only assets are in sys._MEIPASS.
+# Writable data (sessions, cache) must live next to the executable.
+if getattr(sys, "frozen", False):
+    _BUNDLE_DIR = sys._MEIPASS
+    _EXEC_DIR = os.path.dirname(sys.executable)
+else:
+    _BUNDLE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _EXEC_DIR = _BUNDLE_DIR
+
+STATIC_DIR = os.path.join(_BUNDLE_DIR, "static")
+DATA_DIR = os.path.join(_EXEC_DIR, "data")
 CACHE_DIR = os.path.join(DATA_DIR, "cache")
 SESSIONS_DIR = os.path.join(DATA_DIR, "sessions")
 
@@ -231,22 +241,8 @@ class MusicWrappedHandler(SimpleHTTPRequestHandler):
             return
 
         try:
-            import sys
-            sys.argv = [
-                "make_geo_animation.py",
-                report_path,
-                gif_path,
-            ]
-            # Import and run the animation generator
-            import importlib
-            spec = importlib.util.spec_from_file_location(
-                "make_geo_animation",
-                os.path.join(os.path.dirname(__file__), "make_geo_animation.py"),
-            )
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            mod.main()
-
+            import make_geo_animation
+            make_geo_animation.generate(report_path, gif_path)
             self.json_response({"status": "ready", "url": f"/session/{session_id}/geo_animation.gif"})
         except Exception as e:
             self.json_response({"error": f"GIF generation failed: {str(e)}"}, 500)

@@ -257,45 +257,25 @@ def draw_frame(year_label, geo_data, trail_history, all_geo_data, camera):
     return img
 
 
-def main():
-    report_file = sys.argv[1] if len(sys.argv) > 1 else "lastfm_report_data.json"
-    output_file = sys.argv[2] if len(sys.argv) > 2 else "geo_center_animation.gif"
-
+def generate(report_file, output_file):
     with open(report_file, "r", encoding="utf-8") as f:
         report = json.load(f)
 
     geo = report.get("geographic_center")
     if not geo:
-        print("No geographic_center data!")
-        sys.exit(1)
+        raise ValueError("No geographic_center data in report")
 
     by_year = geo.get("by_year", {})
     years = sorted([y for y in by_year.keys() if y != "Unknown"])
-    print(f"Creating animation for {len(years)} years: {years[0]}–{years[-1]}")
 
-    # Fixed camera: locked to bounding box center of ALL yearly centers, never moves
     all_time = geo.get("all_time", {})
     all_lats = [d["center_lat"] for d in by_year.values()]
     all_lngs = [d["center_lng"] for d in by_year.values()]
     cam_lat = (max(all_lats) + min(all_lats)) / 2
     cam_lng = (max(all_lngs) + min(all_lngs)) / 2
-    # Pick zoom that fits the full spread with some padding
-    lat_span = max(all_lats) - min(all_lats)
-    lng_span = max(all_lngs) - min(all_lngs)
-    span = max(lat_span, lng_span)
-    if span > 40:
-        cam_zoom = 4
-    elif span > 25:
-        cam_zoom = 5
-    else:
-        cam_zoom = 5
-    # For this dataset the lng span is ~37° so we need zoom 4–5 range.
-    # Use 5 but shift center to accommodate all points
     cam_zoom = 5
     camera = (cam_lat, cam_lng, cam_zoom)
-    print(f"Camera: {cam_lat:.1f}N, {cam_lng:.1f}E, zoom {cam_zoom}")
 
-    print("Rendering frames...")
     frames = []
     trail_history = []
 
@@ -303,14 +283,11 @@ def main():
         year_data = by_year.get(year)
         if year_data:
             trail_history.append((year_data["center_lat"], year_data["center_lng"], year))
-
-        print(f"  Frame {yi+1}/{len(years)}: {year} → {year_data['nearest_city'] if year_data else 'N/A'}")
         frame = draw_frame(year, year_data, trail_history, geo, camera)
         rgb = Image.new("RGB", frame.size, BG_COLOR)
         rgb.paste(frame, mask=frame.split()[3])
         frames.append(rgb)
 
-    # Final "All Time" frames
     if all_time:
         trail_history.append((all_time["center_lat"], all_time["center_lng"], "All"))
         for _ in range(5):
@@ -319,16 +296,14 @@ def main():
             rgb.paste(frame, mask=frame.split()[3])
             frames.append(rgb)
 
-    print(f"Saving {len(frames)} frames to {output_file}...")
-    iio.imwrite(
-        output_file,
-        [np.array(f) for f in frames],
-        duration=900,
-        loop=0,
-    )
+    iio.imwrite(output_file, [np.array(f) for f in frames], duration=900, loop=0)
 
-    size_kb = os.path.getsize(output_file) / 1024
-    print(f"Done! {output_file} ({size_kb:.0f} KB)")
+
+def main():
+    report_file = sys.argv[1] if len(sys.argv) > 1 else "lastfm_report_data.json"
+    output_file = sys.argv[2] if len(sys.argv) > 2 else "geo_center_animation.gif"
+    generate(report_file, output_file)
+    print(f"Done! {output_file} ({os.path.getsize(output_file)//1024} KB)")
 
 
 if __name__ == "__main__":
